@@ -38,3 +38,18 @@ func TestLoadConfigFileFlatYAML(t *testing.T) {
 		t.Fatalf("unexpected config: %+v", cfg)
 	}
 }
+
+func TestWithDefaultsAllowsExplicitZeroRetries(t *testing.T) {
+	cfg := (Config{MaxRetries: 0}).WithDefaults()
+	if cfg.MaxRetries != 0 {
+		t.Fatalf("MaxRetries = %d", cfg.MaxRetries)
+	}
+}
+
+func TestConfigFromEnvDefaultsRetries(t *testing.T) {
+	t.Setenv("JUPITER_MAX_RETRIES", "")
+	cfg := ConfigFromEnv()
+	if cfg.MaxRetries != DefaultMaxRetries {
+		t.Fatalf("MaxRetries = %d", cfg.MaxRetries)
+	}
+}

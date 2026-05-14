@@ -30,8 +30,6 @@ type Client struct {
 	Portfolio  *portfolio.Client
 	Perps      *perps.Client
 	Prediction *prediction.Client
-
-	http *juphttp.Client
 }
 
 // Option customizes the top-level client.
@@ -69,7 +67,6 @@ func NewClient(cfg Config, opts ...Option) *Client {
 		Portfolio:  portfolio.NewClient(h),
 		Perps:      perps.NewClient(h),
 		Prediction: prediction.NewClient(h),
-		http:       h,
 	}
 }
 

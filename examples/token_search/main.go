@@ -18,5 +18,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	_ = json.NewEncoder(os.Stdout).Encode(out)
+	if err := json.NewEncoder(os.Stdout).Encode(out); err != nil {
+		log.Fatal(err)
+	}
 }

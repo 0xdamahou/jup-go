@@ -233,7 +233,7 @@ func isRetryableErr(err error) bool {
 
 func isNetRetryable(err error) bool {
 	var ne net.Error
-	return errors.As(err, &ne) && (ne.Timeout() || ne.Temporary())
+	return errors.As(err, &ne) && ne.Timeout()
 }
 
 func (c *Client) log(method, endpoint string, status int, duration time.Duration, retry int, requestID string, err error) {

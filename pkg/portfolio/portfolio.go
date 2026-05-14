@@ -35,6 +35,9 @@ func (c *Client) Positions(ctx context.Context, wallet string) (json.RawMessage,
 	if wallet == "" {
 		return nil, errors.New("wallet is required")
 	}
+	if err := juphttp.ValidatePublicKey(wallet); err != nil {
+		return nil, err
+	}
 	var out json.RawMessage
 	return out, c.http.GetJSON(ctx, c.http.Config().BaseURL, "/portfolio/v1/positions/"+wallet, nil, &out)
 }

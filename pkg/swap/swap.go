@@ -302,12 +302,12 @@ type ExecuteRequest struct {
 
 // ExecuteResponse is the managed execution result.
 type ExecuteResponse struct {
-	Status    string `json:"status,omitempty"`
-	Signature string `json:"signature,omitempty"`
-	Slot      uint64 `json:"slot,omitempty"`
-	Code      int    `json:"code,omitempty"`
-	Error     string `json:"error,omitempty"`
-	Raw       json.RawMessage
+	Status    string          `json:"status,omitempty"`
+	Signature string          `json:"signature,omitempty"`
+	Slot      uint64          `json:"slot,omitempty"`
+	Code      int             `json:"code,omitempty"`
+	Error     string          `json:"error,omitempty"`
+	Raw       json.RawMessage `json:"-"`
 }
 
 func (r *ExecuteResponse) UnmarshalJSON(data []byte) error {
@@ -325,6 +325,19 @@ func (r *ExecuteResponse) UnmarshalJSON(data []byte) error {
 func (c *Client) Execute(ctx context.Context, req ExecuteRequest) (*ExecuteResponse, error) {
 	var out ExecuteResponse
 	return &out, c.http.PostJSON(ctx, c.http.Config().BaseURL, pathPrefix+"/execute", req, &out, false)
+}
+
+// IsExpired reports whether the order is expired at now.
+func (r *OrderResponse) IsExpired(now time.Time) bool {
+	return r != nil && r.ExpireAt != nil && !now.Before(*r.ExpireAt)
+}
+
+// ExpiresWithin reports whether the order expires within d from now.
+func (r *OrderResponse) ExpiresWithin(now time.Time, d time.Duration) bool {
+	if r == nil || r.ExpireAt == nil || d < 0 {
+		return false
+	}
+	return !r.ExpireAt.After(now.Add(d))
 }
 
 // ParseComputeBudgetInstructions extracts CU limit and CU price from ComputeBudget instructions.

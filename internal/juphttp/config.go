@@ -18,6 +18,8 @@ const (
 	DefaultUserAgent  = "jup-go/0.1"
 )
 
+const unsetMaxRetries = -1
+
 // Config contains shared Jupiter client settings.
 type Config struct {
 	APIKey          string        `json:"apiKey"`
@@ -47,9 +49,6 @@ func (c Config) WithDefaults() Config {
 	if c.MaxRetries < 0 {
 		c.MaxRetries = 0
 	}
-	if c.MaxRetries == 0 {
-		c.MaxRetries = DefaultMaxRetries
-	}
 	if c.RetryBackoff <= 0 {
 		c.RetryBackoff = DefaultBackoff
 	}
@@ -63,7 +62,10 @@ func (c Config) WithDefaults() Config {
 func ConfigFromEnv() Config {
 	timeout := parseDurationEnv("JUPITER_TIMEOUT", 0)
 	backoff := parseDurationEnv("JUPITER_RETRY_BACKOFF", 0)
-	retries, _ := strconv.Atoi(os.Getenv("JUPITER_MAX_RETRIES"))
+	retries := DefaultMaxRetries
+	if raw := os.Getenv("JUPITER_MAX_RETRIES"); raw != "" {
+		retries, _ = strconv.Atoi(raw)
+	}
 	fee, _ := strconv.Atoi(os.Getenv("JUPITER_REFERRAL_FEE_BPS"))
 	return Config{
 		APIKey:          os.Getenv("JUPITER_API_KEY"),
@@ -103,9 +105,12 @@ func LoadConfigFile(path string) (Config, error) {
 		return Config{}, err
 	}
 	if strings.HasSuffix(path, ".json") {
-		var cfg Config
+		cfg := Config{MaxRetries: unsetMaxRetries}
 		if err := json.Unmarshal(raw, &cfg); err != nil {
 			return Config{}, err
+		}
+		if cfg.MaxRetries == unsetMaxRetries {
+			cfg.MaxRetries = DefaultMaxRetries
 		}
 		return cfg.WithDefaults(), nil
 	}
@@ -133,6 +138,7 @@ func parseFlatYAML(raw string) (Config, error) {
 		UserAgent:       values["userAgent"],
 		ReferralAccount: values["referralAccount"],
 		Payer:           values["payer"],
+		MaxRetries:      DefaultMaxRetries,
 	}
 	if v := values["timeout"]; v != "" {
 		cfg.Timeout, _ = time.ParseDuration(v)
@@ -140,7 +146,9 @@ func parseFlatYAML(raw string) (Config, error) {
 	if v := values["retryBackoff"]; v != "" {
 		cfg.RetryBackoff, _ = time.ParseDuration(v)
 	}
-	cfg.MaxRetries, _ = strconv.Atoi(values["maxRetries"])
+	if v := values["maxRetries"]; v != "" {
+		cfg.MaxRetries, _ = strconv.Atoi(v)
+	}
 	cfg.ReferralFeeBPS, _ = strconv.Atoi(values["referralFeeBps"])
 	return cfg.WithDefaults(), nil
 }

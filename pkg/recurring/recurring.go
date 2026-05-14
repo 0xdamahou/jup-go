@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/url"
 	"strconv"
+	"time"
 
 	"github.com/0xdamahou/jup-go/internal/juphttp"
 )
@@ -45,6 +46,15 @@ func (c *Client) CreateOrder(ctx context.Context, req CreateOrderRequest) (*Orde
 	if req.NumberOfOrders < 2 {
 		return nil, errors.New("numberOfOrders must be at least 2")
 	}
+	if req.IntervalSeconds <= 0 {
+		return nil, errors.New("intervalSeconds must be positive")
+	}
+	if req.StartAt != nil && *req.StartAt <= time.Now().Unix() {
+		return nil, errors.New("startAt must be in the future")
+	}
+	if err := validatePriceRange(req.MinPrice, req.MaxPrice); err != nil {
+		return nil, err
+	}
 	var out OrderResponse
 	return &out, c.http.PostJSON(ctx, c.http.Config().BaseURL, "/recurring/v1/createOrder", req, &out, false)
 }
@@ -71,6 +81,20 @@ func (c *Client) Orders(ctx context.Context, user string, page int) ([]OrderResp
 	var out []OrderResponse
 	return out, c.http.GetJSON(ctx, c.http.Config().BaseURL, "/recurring/v1/getRecurringOrders", q, &out)
 }
+func (c *Client) History(ctx context.Context, user string, page int) ([]OrderResponse, error) {
+	if user == "" {
+		return nil, errors.New("user is required")
+	}
+	if err := juphttp.ValidatePublicKey(user); err != nil {
+		return nil, err
+	}
+	q := url.Values{"user": []string{user}}
+	if page > 0 {
+		q.Set("page", strconv.Itoa(page))
+	}
+	var out []OrderResponse
+	return out, c.http.GetJSON(ctx, c.http.Config().BaseURL, "/recurring/v1/getRecurringOrderHistory", q, &out)
+}
 
 func validate(user, input, output, amount string) error {
 	for _, v := range []string{user, input, output} {
@@ -79,4 +103,25 @@ func validate(user, input, output, amount string) error {
 		}
 	}
 	return juphttp.ValidateRawAmount(amount)
+}
+
+func validatePriceRange(minPrice, maxPrice string) error {
+	var min, max float64
+	var err error
+	if minPrice != "" {
+		min, err = strconv.ParseFloat(minPrice, 64)
+		if err != nil || min <= 0 {
+			return errors.New("minPrice must be a positive number")
+		}
+	}
+	if maxPrice != "" {
+		max, err = strconv.ParseFloat(maxPrice, 64)
+		if err != nil || max <= 0 {
+			return errors.New("maxPrice must be a positive number")
+		}
+	}
+	if minPrice != "" && maxPrice != "" && min > max {
+		return errors.New("minPrice must be less than or equal to maxPrice")
+	}
+	return nil
 }

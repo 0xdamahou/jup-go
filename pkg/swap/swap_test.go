@@ -143,6 +143,31 @@ func TestParseComputeBudgetInstructions(t *testing.T) {
 	}
 }
 
+func TestGuardMaxFeeRejectsPriceWithoutLimit(t *testing.T) {
+	resp := BuildResponse{ComputeBudget: ComputeBudget{HasUnitPrice: true, UnitPriceMicrolamports: 1_000_000}}
+	if err := resp.GuardMaxFee(1); err == nil {
+		t.Fatal("expected missing CU limit error")
+	}
+}
+
+func TestExecuteDoesNotRetry(t *testing.T) {
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte(`{"message":"upstream"}`))
+	}))
+	defer srv.Close()
+	c := NewClient(juphttp.NewClient(juphttp.Config{BaseURL: srv.URL, Timeout: time.Second, MaxRetries: 3, RetryBackoff: time.Millisecond}))
+	_, err := c.Execute(context.Background(), ExecuteRequest{SignedTransaction: "tx"})
+	if err == nil {
+		t.Fatal("expected execute error")
+	}
+	if calls != 1 {
+		t.Fatalf("execute retried %d times", calls)
+	}
+}
+
 func computeUnitLimitData(limit uint32) string {
 	data := make([]byte, 5)
 	data[0] = computeBudgetSetComputeUnitLimit

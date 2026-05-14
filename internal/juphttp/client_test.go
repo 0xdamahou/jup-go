@@ -53,3 +53,39 @@ func TestGetJSONStructuredError(t *testing.T) {
 		t.Fatalf("unexpected api error: %+v", apiErr)
 	}
 }
+
+func TestGetJSONRetries5xx(t *testing.T) {
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls == 1 {
+			w.WriteHeader(http.StatusBadGateway)
+			_, _ = w.Write([]byte(`{"message":"upstream"}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+	client := NewClient(Config{Timeout: time.Second, MaxRetries: 1, RetryBackoff: time.Millisecond})
+	var out struct {
+		OK bool `json:"ok"`
+	}
+	if err := client.GetJSON(context.Background(), srv.URL, "/test", nil, &out); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 2 || !out.OK {
+		t.Fatalf("calls=%d out=%+v", calls, out)
+	}
+}
+
+func TestGetJSONMalformedJSON(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{`))
+	}))
+	defer srv.Close()
+	client := NewClient(Config{Timeout: time.Second})
+	var out struct{}
+	if err := client.GetJSON(context.Background(), srv.URL, "/bad-json", nil, &out); err == nil {
+		t.Fatal("expected decode error")
+	}
+}
