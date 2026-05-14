@@ -55,6 +55,19 @@ type CreateOrderRequest struct {
 	DepositSignedTx    string           `json:"depositSignedTx,omitempty"`
 	AdditionalJSONBody json.RawMessage  `json:"-"`
 }
+
+// OCOOrderRequest contains the two price legs for a take-profit/stop-loss order.
+type OCOOrderRequest struct {
+	TakeProfit CreateOrderRequest
+	StopLoss   CreateOrderRequest
+}
+
+// OTOCOOrderRequest contains an entry order and the OCO pair opened after entry.
+type OTOCOOrderRequest struct {
+	Entry      CreateOrderRequest
+	TakeProfit CreateOrderRequest
+	StopLoss   CreateOrderRequest
+}
 type OrderResponse struct {
 	ID          string          `json:"id,omitempty"`
 	Status      string          `json:"status,omitempty"`
@@ -77,6 +90,32 @@ func (c *Client) CreatePriceOrder(ctx context.Context, req CreateOrderRequest) (
 	}
 	var out OrderResponse
 	return &out, c.http.PostJSON(ctx, c.http.Config().BaseURL, "/trigger/v2/orders/price", req, &out, false)
+}
+func (c *Client) CreateOCOPriceOrder(ctx context.Context, req OCOOrderRequest) (*OrderResponse, error) {
+	if err := validateOCO(req); err != nil {
+		return nil, err
+	}
+	body := map[string]CreateOrderRequest{
+		"takeProfit": withOrderType(req.TakeProfit, OCO),
+		"stopLoss":   withOrderType(req.StopLoss, OCO),
+	}
+	var out OrderResponse
+	return &out, c.http.PostJSON(ctx, c.http.Config().BaseURL, "/trigger/v2/orders/price", body, &out, false)
+}
+func (c *Client) CreateOTOCOPriceOrder(ctx context.Context, req OTOCOOrderRequest) (*OrderResponse, error) {
+	if err := validateOCO(OCOOrderRequest{TakeProfit: req.TakeProfit, StopLoss: req.StopLoss}); err != nil {
+		return nil, err
+	}
+	if err := validateOrder(req.Entry.WalletPubkey, req.Entry.InputMint, req.Entry.OutputMint, req.Entry.MakingAmount); err != nil {
+		return nil, err
+	}
+	body := map[string]CreateOrderRequest{
+		"entry":      withOrderType(req.Entry, OTOCO),
+		"takeProfit": withOrderType(req.TakeProfit, OTOCO),
+		"stopLoss":   withOrderType(req.StopLoss, OTOCO),
+	}
+	var out OrderResponse
+	return &out, c.http.PostJSON(ctx, c.http.Config().BaseURL, "/trigger/v2/orders/price", body, &out, false)
 }
 func (c *Client) CancelPriceOrder(ctx context.Context, orderID string) (*OrderResponse, error) {
 	if orderID == "" {
@@ -113,4 +152,28 @@ func validateOrder(wallet, input, output, amount string) error {
 		}
 	}
 	return juphttp.ValidateRawAmount(amount)
+}
+
+func validateOCO(req OCOOrderRequest) error {
+	if err := validateOrder(req.TakeProfit.WalletPubkey, req.TakeProfit.InputMint, req.TakeProfit.OutputMint, req.TakeProfit.MakingAmount); err != nil {
+		return err
+	}
+	if err := validateOrder(req.StopLoss.WalletPubkey, req.StopLoss.InputMint, req.StopLoss.OutputMint, req.StopLoss.MakingAmount); err != nil {
+		return err
+	}
+	if req.TakeProfit.WalletPubkey != req.StopLoss.WalletPubkey {
+		return errors.New("OCO legs must use the same wallet")
+	}
+	if req.TakeProfit.InputMint != req.StopLoss.InputMint || req.TakeProfit.OutputMint != req.StopLoss.OutputMint {
+		return errors.New("OCO legs must use the same token pair")
+	}
+	if req.TakeProfit.TriggerCondition == req.StopLoss.TriggerCondition {
+		return errors.New("OCO legs must use different trigger conditions")
+	}
+	return nil
+}
+
+func withOrderType(req CreateOrderRequest, orderType OrderType) CreateOrderRequest {
+	req.OrderType = orderType
+	return req
 }

@@ -1,7 +1,6 @@
 package swap
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/binary"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"github.com/0xdamahou/jup-go/internal/juphttp"
+	"github.com/mr-tron/base58"
 )
 
 const pathPrefix = "/swap/v2"
@@ -351,6 +351,11 @@ func ParseComputeBudgetInstructions(instructions []Instruction) (ComputeBudget, 
 		if err != nil {
 			return budget, err
 		}
+		if len(data) > 0 && data[0] != computeBudgetSetComputeUnitLimit && data[0] != computeBudgetSetComputeUnitPrice {
+			if fallback, err := base58.Decode(ix.Data); err == nil {
+				data = fallback
+			}
+		}
 		if len(data) == 0 {
 			continue
 		}
@@ -399,7 +404,7 @@ func decodeInstructionData(raw string) ([]byte, instructionEncoding, error) {
 	if err == nil {
 		return data, instructionEncodingBase64, nil
 	}
-	data, err = decodeBase58(raw)
+	data, err = base58.Decode(raw)
 	if err == nil {
 		return data, instructionEncodingBase58, nil
 	}
@@ -408,7 +413,7 @@ func decodeInstructionData(raw string) ([]byte, instructionEncoding, error) {
 
 func encodeInstructionData(data []byte, enc instructionEncoding) string {
 	if enc == instructionEncodingBase58 {
-		return encodeBase58(data)
+		return base58.Encode(data)
 	}
 	return base64.StdEncoding.EncodeToString(data)
 }
@@ -418,49 +423,6 @@ func encodeSetComputeUnitPrice(microlamports uint64) []byte {
 	data[0] = computeBudgetSetComputeUnitPrice
 	binary.LittleEndian.PutUint64(data[1:], microlamports)
 	return data
-}
-
-func decodeBase58(s string) ([]byte, error) {
-	const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
-	result := big.NewInt(0)
-	base := big.NewInt(58)
-	for _, r := range s {
-		idx := int64(bytes.IndexRune([]byte(alphabet), r))
-		if idx < 0 {
-			return nil, fmt.Errorf("invalid base58 character %q", r)
-		}
-		result.Mul(result, base)
-		result.Add(result, big.NewInt(idx))
-	}
-	decoded := result.Bytes()
-	leadingZeros := 0
-	for leadingZeros < len(s) && s[leadingZeros] == '1' {
-		leadingZeros++
-	}
-	return append(bytes.Repeat([]byte{0}, leadingZeros), decoded...), nil
-}
-
-func encodeBase58(data []byte) string {
-	const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
-	x := new(big.Int).SetBytes(data)
-	base := big.NewInt(58)
-	zero := big.NewInt(0)
-	mod := new(big.Int)
-	var out []byte
-	for x.Cmp(zero) > 0 {
-		x.DivMod(x, base, mod)
-		out = append(out, alphabet[mod.Int64()])
-	}
-	for _, b := range data {
-		if b != 0 {
-			break
-		}
-		out = append(out, alphabet[0])
-	}
-	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
-		out[i], out[j] = out[j], out[i]
-	}
-	return string(out)
 }
 
 func validateOrder(inputMint, outputMint, amount string) error {

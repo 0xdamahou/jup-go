@@ -17,5 +17,6 @@ Use `/order` plus `/execute` for managed landing. Use `/build` only when the cal
 - `PriorityFeeMicrolamports` overrides the returned `SetComputeUnitPrice` instruction in `BuildResponse.Raw`.
 - `MaxFeeLamports` rejects responses where `ceil(CU limit * CU price / 1_000_000)` exceeds the caller's limit.
 - If a CU price exists without a CU limit and `MaxFeeLamports` is set, the client returns an error because it cannot estimate the upper bound safely.
+- Instruction data supports base64 and base58 through `github.com/mr-tron/base58`; the SDK no longer maintains its own base58 codec.
 
 Always treat `Amount` as raw integer token units. Keep quote freshness checks in caller strategy; never treat a quote as executable forever.

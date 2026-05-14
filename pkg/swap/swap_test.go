@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/0xdamahou/jup-go/internal/juphttp"
+	"github.com/mr-tron/base58"
 )
 
 const (
@@ -140,6 +141,18 @@ func TestParseComputeBudgetInstructions(t *testing.T) {
 	}
 	if got := EstimatePriorityFeeLamports(budget.UnitLimit, budget.UnitPriceMicrolamports); got != 125_000 {
 		t.Fatalf("fee = %d", got)
+	}
+}
+
+func TestParseComputeBudgetInstructionsBase58(t *testing.T) {
+	budget, err := ParseComputeBudgetInstructions([]Instruction{
+		{ProgramID: computeBudgetProgramID, Data: base58.Encode(encodeSetComputeUnitPrice(123))},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !budget.HasUnitPrice || budget.UnitPriceMicrolamports != 123 {
+		t.Fatalf("budget = %+v", budget)
 	}
 }
 
